@@ -1,8 +1,9 @@
 // Listen for messages from content script
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    console.log('Received message:', message);
+    console.log('Background script received message:', message);
     
     if (message.action === 'factCheck') {
+        // Start fact checking process
         handleFactCheck(message.text)
             .then(response => {
                 console.log('Fact check completed successfully');
@@ -15,12 +16,99 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return true; // Keep the message channel open for async response
     } else if (message.action === 'openPopup') {
         console.log('Opening popup...');
-        chrome.action.openPopup();
-        return false;
+        
+        const openPopupWithRetry = async () => {
+            const maxRetries = message.forceOpen ? 3 : 1;
+            let retryCount = 0;
+
+            const tryOpen = async () => {
+                try {
+                    // Get the current tab
+                    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+                    if (!tab) {
+                        throw new Error('No active tab found');
+                    }
+
+                    // Try to open the popup
+                    await chrome.action.openPopup();
+                    console.log('Popup opened successfully');
+
+                    // After successful popup open, get the selected text from storage
+                    const data = await chrome.storage.local.get(['selectedText']);
+                    if (data.selectedText) {
+                        // Start the fact check process
+                        try {
+                            const results = await handleFactCheck(data.selectedText);
+                            await chrome.storage.local.set({
+                                results: results,
+                                status: 'completed',
+                                timestamp: Date.now()
+                            });
+                            
+                            // Send results to popup
+                            chrome.runtime.sendMessage({
+                                action: 'displayResults',
+                                results: results
+                            });
+                        } catch (error) {
+                            console.error('Fact check failed:', error);
+                            await chrome.storage.local.set({
+                                error: error.message,
+                                status: 'error',
+                                timestamp: Date.now()
+                            });
+                            
+                            chrome.runtime.sendMessage({
+                                action: 'displayError',
+                                error: error.message
+                            });
+                        }
+                    }
+
+                    return true;
+                } catch (error) {
+                    console.error(`Failed to open popup (attempt ${retryCount + 1}):`, error);
+                    if (retryCount < maxRetries - 1) {
+                        retryCount++;
+                        await new Promise(resolve => setTimeout(resolve, 100));
+                        return tryOpen();
+                    }
+                    return false;
+                }
+            };
+
+            const success = await tryOpen();
+            if (!success) {
+                // If we couldn't open the popup, make the icon noticeable
+                try {
+                    await chrome.action.setBadgeText({ text: "!" });
+                    await chrome.action.setBadgeBackgroundColor({ color: "#F44336" });
+                } catch (error) {
+                    console.error('Failed to set badge:', error);
+                }
+            }
+            sendResponse({ success });
+        };
+
+        openPopupWithRetry().catch(error => {
+            console.error('Error in openPopupWithRetry:', error);
+            sendResponse({ success: false, error: error.message });
+        });
+
+        return true; // Keep the message channel open for async response
+    } else if (message.action === 'updateSelectedText') {
+        // Forward the selected text update to the popup
+        chrome.runtime.sendMessage({
+            action: 'updateSelectedText',
+            text: message.text
+        }).catch(error => {
+            console.error('Error forwarding selected text:', error);
+        });
+        return false; // No async response needed
     }
 });
 
-// Create context menu item when extension is in`st`alled
+// Create context menu item when extension is installed
 chrome.runtime.onInstalled.addListener(() => {
     chrome.contextMenus.removeAll(() => {
         chrome.contextMenus.create({
