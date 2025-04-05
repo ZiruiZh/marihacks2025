@@ -153,8 +153,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 highlightedContent.textContent = message.text;
                 chrome.storage.local.set({ 
                     savedText: message.text,
-                    selectedText: message.text
+                    selectedText: message.text,
+                    status: 'analyzing' // Update status to show we're analyzing
                 });
+                showLoading(); // Show loading state when text is updated
             }
         }
     });
@@ -170,9 +172,13 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         if (resultsContent) resultsContent.style.display = 'none';
         if (errorContent) errorContent.style.display = 'none';
+
+        // Clean up old results when hiding everything
+        chrome.storage.local.remove(['results', 'error']);
     }
 
     function showLoading() {
+        hideAll(); // Clear any existing state first
         const loadingIndicator = document.getElementById('loadingIndicator');
         const container = document.querySelector('.container');
         const loadingText = loadingIndicator.querySelector('p');
