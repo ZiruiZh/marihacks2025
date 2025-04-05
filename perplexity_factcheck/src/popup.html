@@ -1,20 +1,88 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Perplexity Fact Checker</title>
+    <title>Fact Checker</title>
     <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
     <div class="container">
-        <h1>Perplexity Fact Checker</h1>
-        <div class="instructions">
-            <p>Highlight text on any webpage to fact-check it</p>
+        <div class="header">
+            <h1>FACTCHECK</h1>
+            <div class="truth-section">
+                <span class="truth-question">is this true?</span>
+                <span id="truth-label" class="truth-label">analyzing...</span>
+                <div id="truth-percentage" class="truth-percentage">
+                    <span id="percentage-value">--%</span>
+                </div>
+            </div>
         </div>
-        <div id="results" class="results-container">
-            <!-- Results will be displayed here -->
+
+        <div class="highlighted-section">
+            <h2>Selected Text</h2>
+            <div id="highlighted-content" class="highlighted-content">
+                <span class="placeholder">Highlight any text on the webpage to fact-check it</span>
+            </div>
         </div>
+
+        <div class="context-section">
+            <h2>Context: <span id="context-date" class="date"></span></h2>
+            <div id="context-content" class="context-content">
+                <span class="source-content" id="left-sources">highlighted</span>
+            </div>
+        </div>
+
+        <div class="sources-section">
+            <div class="source-category">
+                <div class="source-header">
+                    <span class="source-label left">LEFT</span>
+                    <div class="bias-meter-container">
+                        <div class="bias-meter">
+                            <div id="left-meter" class="meter-fill left-meter"></div>
+                        </div>
+                        <span id="left-bias" class="bias-percentage">--%</span>
+                    </div>
+                </div>
+                <span class="source-content" id="left-sources">Loading sources...</span>
+            </div>
+            <div class="source-category">
+                <div class="source-header">
+                    <span class="source-label right">RIGHT</span>
+                    <div class="bias-meter-container">
+                        <div class="bias-meter">
+                            <div id="right-meter" class="meter-fill right-meter"></div>
+                        </div>
+                        <span id="right-bias" class="bias-percentage">--%</span>
+                    </div>
+                </div>
+                <span class="source-content" id="right-sources">Loading sources...</span>
+            </div>
+            <div class="source-category">
+                <div class="source-header">
+                    <span class="source-label center">CENTER</span>
+                    <div class="bias-meter-container">
+                        <div class="bias-meter">
+                            <div id="center-meter" class="meter-fill center-meter"></div>
+                        </div>
+                        <span id="center-bias" class="bias-percentage">--%</span>
+                    </div>
+                </div>
+                <span class="source-content" id="center-sources">Loading sources...</span>
+            </div>
+        </div>
+
+        <div class="recently-accessed">
+            <p>^ Recently accessed</p>
+        </div>
+
         <div id="loading" class="loading hidden">
-            <p>Fact-checking in progress...</p>
+            <div class="loading-animation">
+                <div class="loading-bar"></div>
+                <div class="loading-bar"></div>
+                <div class="loading-bar"></div>
+                <div class="loading-bar"></div>
+                <div class="loading-bar"></div>
+            </div>
+            <p class="loading-text">Analyzing with Perplexity AI...</p>
         </div>
     </div>
     <script src="js/popup.js"></script>
