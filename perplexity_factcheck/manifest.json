@@ -9,12 +9,7 @@
     "storage"
   ],
   "action": {
-    "default_popup": "src/popup.html",
-    "default_icon": {
-      "16": "src/images/icon16.png",
-      "48": "src/images/icon48.png",
-      "128": "src/images/icon128.png"
-    }
+    "default_popup": "src/popup.html"
   },
   "background": {
     "service_worker": "src/js/background.js"
@@ -24,10 +19,5 @@
       "matches": ["<all_urls>"],
       "js": ["src/js/content.js"]
     }
-  ],
-  "icons": {
-    "16": "src/images/icon16.png",
-    "48": "src/images/icon48.png",
-    "128": "src/images/icon128.png"
-  }
+  ]
 }
