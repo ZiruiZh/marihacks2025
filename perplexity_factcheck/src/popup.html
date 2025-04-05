@@ -6,14 +6,6 @@
     <meta charset="UTF-8">
 </head>
 <body>
-    <div class="loading" id="loading">
-        <div class="loading-animation">
-            <div class="loading-circle"></div>
-            <div class="loading-circle"></div>
-        </div>
-        <p class="loading-text">Analyzing with Perplexity AI...</p>
-    </div>
-
     <div class="container">
         <div class="header">
             <h1>Perplexity Fact Check</h1>
@@ -34,7 +26,7 @@
 
         <div class="highlighted-section">
             <h2>Selected Text</h2>
-            <div id="highlighted-content" class="highlighted-content">
+            <div id="highlightedContent" class="highlighted-content">
                 <span class="placeholder">Highlight any text on the webpage to fact-check it</span>
             </div>
         </div>
@@ -42,7 +34,7 @@
         <div class="context-section">
             <h2>Context: <span id="context-date" class="date"></span></h2>
             <div id="context-content" class="context-content">
-                <span class="source-content" id="left-sources">highlighted</span>
+                <span class="source-content">Waiting for analysis...</span>
             </div>
         </div>
 
@@ -84,6 +76,19 @@
 
         <div class="recently-accessed">
             <p>^ Recently accessed</p>
+        </div>
+
+        <div id="loadingIndicator" class="loading-indicator" style="display: none;">
+            <div class="spinner"></div>
+            <p>Analyzing...</p>
+        </div>
+
+        <div id="resultsContent" class="results-content" style="display: none;">
+            <!-- Results will be displayed here -->
+        </div>
+
+        <div id="errorContent" class="error-content" style="display: none;">
+            <!-- Errors will be displayed here -->
         </div>
     </div>
     <script src="js/popup.js"></script>
