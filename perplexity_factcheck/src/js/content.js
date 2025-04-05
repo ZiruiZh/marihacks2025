@@ -1,27 +1,23 @@
+import { handleFactCheck } from './background.js';
 let lastSelectedText = '';
 
 // Function to handle text selection
 function handleTextSelection() {
     const selectedText = window.getSelection().toString().trim();
     
-    // Only process if the selection has changed
     if (selectedText && selectedText !== lastSelectedText) {
         lastSelectedText = selectedText;
         
+        // Store the selected text
+        chrome.storage.local.set({ selectedText: selectedText });
+        
         // Create a floating button near the selection
         showSelectionButton(selectedText);
-        
-        // Send the selected text to the extension
-        chrome.runtime.sendMessage({
-            action: 'updateSelection',
-            text: selectedText
-        });
     }
 }
 
 // Function to create and show the floating button
 function showSelectionButton(selectedText) {
-    // Remove any existing button
     removeExistingButton();
     
     if (!selectedText) return;
@@ -32,36 +28,29 @@ function showSelectionButton(selectedText) {
     const range = selection.getRangeAt(0);
     const rect = range.getBoundingClientRect();
     
-    // Create the button
     const button = document.createElement('div');
     button.id = 'factcheck-button';
     
-    // Calculate position to ensure button is visible
-    const buttonWidth = 120; // Approximate width of the button
-    const buttonHeight = 36; // Approximate height of the button
-    const spacing = 10; // Space between button and selection
+    const buttonWidth = 120;
+    const buttonHeight = 36;
+    const spacing = 10;
     
-    // Get viewport dimensions
     const viewportWidth = window.innerWidth;
     const viewportHeight = window.innerHeight;
     
-    // Calculate initial position
     let leftPos = rect.left + (rect.width / 2) - (buttonWidth / 2);
     let topPos = rect.top - buttonHeight - spacing;
     
-    // Adjust horizontal position if button would go outside viewport
     if (leftPos < spacing) {
         leftPos = spacing;
     } else if (leftPos + buttonWidth > viewportWidth - spacing) {
         leftPos = viewportWidth - buttonWidth - spacing;
     }
     
-    // If button would go above viewport, place it below the selection
     if (topPos < spacing) {
         topPos = rect.bottom + spacing;
     }
     
-    // Add scroll position to get absolute position
     leftPos += window.scrollX;
     topPos += window.scrollY;
     
@@ -98,27 +87,45 @@ function showSelectionButton(selectedText) {
     
     document.body.appendChild(button);
     
-    // Animate button appearance
     const buttonElement = button.firstElementChild;
     requestAnimationFrame(() => {
         buttonElement.style.transform = 'scale(1)';
         buttonElement.style.opacity = '1';
     });
     
-    // Add hover effect
     buttonElement.addEventListener('mouseover', () => {
         buttonElement.style.transform = 'scale(1.05)';
     });
+    
     buttonElement.addEventListener('mouseout', () => {
         buttonElement.style.transform = 'scale(1)';
     });
     
-    // Add click handler
-    buttonElement.addEventListener('click', () => {
-        chrome.runtime.sendMessage({
-            action: 'factCheck',
-            text: selectedText
+    buttonElement.addEventListener('click', async () => {
+        console.log('Button clicked with text:', selectedText);
+        
+        // Store the selected text
+        await chrome.storage.local.set({ 
+            selectedText: selectedText,
+            timestamp: Date.now()
         });
+        console.log('Stored selected text in chrome.storage');
+        
+        // Call handleFactCheck directly with the selected text
+        const results = await handleFactCheck(selectedText);
+        console.log('Received results from handleFactCheck:', results);
+        
+        // Store the results
+        await chrome.storage.local.set({ 
+            results: results,
+            timestamp: Date.now()
+        });
+        console.log('Stored results in chrome.storage');
+        
+        // Try to open the popup
+        chrome.runtime.sendMessage({ action: 'openPopup' });
+        console.log('Sent message to open popup');
+        
         removeExistingButton();
     });
 }
@@ -133,9 +140,7 @@ function removeExistingButton() {
 
 // Listen for text selection events
 document.addEventListener('mouseup', (e) => {
-    // Don't show the button if right-clicking
     if (e.button !== 2) {
-        // Short delay to ensure selection is complete
         setTimeout(() => {
             handleTextSelection();
         }, 10);
@@ -149,13 +154,121 @@ document.addEventListener('mousedown', (e) => {
     }
 });
 
-// Listen for messages from the popup and background
+// Function to display fact-checking results
+function displayResults(results) {
+    // Remove any existing results
+    removeExistingResults();
+    
+    // Parse the JSON response
+    let parsedResults;
+    try {
+        parsedResults = JSON.parse(results);
+    } catch (error) {
+        console.error('Error parsing results:', error);
+        displayError('Failed to parse fact-checking results');
+        return;
+    }
+    
+    // Create results container
+    const resultsContainer = document.createElement('div');
+    resultsContainer.id = 'factcheck-results';
+    resultsContainer.innerHTML = `
+        <div style="
+            position: fixed;
+            z-index: 10000;
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+            max-width: 400px;
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        ">
+            <h3 style="margin: 0 0 15px 0; color: #333;">Fact Check Results</h3>
+            <div style="margin-bottom: 15px;">
+                <div style="font-weight: bold; margin-bottom: 5px;">Truth Percentage:</div>
+                <div style="color: ${parsedResults.truthPercentage >= 70 ? '#4CAF50' : parsedResults.truthPercentage >= 40 ? '#FFC107' : '#F44336'}">
+                    ${parsedResults.truthPercentage}%
+                </div>
+            </div>
+            <div style="margin-bottom: 15px;">
+                <div style="font-weight: bold; margin-bottom: 5px;">Context:</div>
+                <div>${parsedResults.context}</div>
+            </div>
+            <div style="margin-bottom: 15px;">
+                <div style="font-weight: bold; margin-bottom: 5px;">Source Bias:</div>
+                <div>Left: ${parsedResults.sources.left}% | Center: ${parsedResults.sources.center}% | Right: ${parsedResults.sources.right}%</div>
+            </div>
+            <div style="text-align: right;">
+                <button style="
+                    background: #6a11cb;
+                    color: white;
+                    border: none;
+                    padding: 8px 16px;
+                    border-radius: 4px;
+                    cursor: pointer;
+                " onclick="document.getElementById('factcheck-results').remove()">Close</button>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(resultsContainer);
+}
+
+// Function to display errors
+function displayError(error) {
+    const errorContainer = document.createElement('div');
+    errorContainer.id = 'factcheck-error';
+    errorContainer.innerHTML = `
+        <div style="
+            position: fixed;
+            z-index: 10000;
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+            max-width: 400px;
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        ">
+            <h3 style="margin: 0 0 15px 0; color: #F44336;">Error</h3>
+            <div style="margin-bottom: 15px;">${error}</div>
+            <div style="text-align: right;">
+                <button style="
+                    background: #6a11cb;
+                    color: white;
+                    border: none;
+                    padding: 8px 16px;
+                    border-radius: 4px;
+                    cursor: pointer;
+                " onclick="document.getElementById('factcheck-error').remove()">Close</button>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(errorContainer);
+}
+
+// Function to remove existing results
+function removeExistingResults() {
+    const existingResults = document.getElementById('factcheck-results');
+    if (existingResults) {
+        existingResults.remove();
+    }
+    const existingError = document.getElementById('factcheck-error');
+    if (existingError) {
+        existingError.remove();
+    }
+}
+
+// Listen for messages from the popup
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.action === 'getSelectedText') {
         sendResponse({ text: lastSelectedText });
-    } else if (message.action === 'updateSelection') {
-        lastSelectedText = message.text;
-        // Don't show the floating button for context menu selections
     }
     return true;
 });
