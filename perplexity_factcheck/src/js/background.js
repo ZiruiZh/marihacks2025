@@ -25,7 +25,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 });
 
-// Create context menu item when extension is installed
+// Create context menu item when extension is in`st`alled
 chrome.runtime.onInstalled.addListener(() => {
     chrome.contextMenus.removeAll(() => {
         chrome.contextMenus.create({
