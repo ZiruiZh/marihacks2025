@@ -11,8 +11,13 @@
     "clipboardWrite"
   ],
   "host_permissions": [
-    "https://api.perplexity.ai/*"
+    "https://api.perplexity.ai/*",
+    "https://*/*"
   ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'",
+    "sandbox": "sandbox allow-scripts allow-forms allow-popups allow-modals; script-src 'self' 'unsafe-inline' 'unsafe-eval'; child-src 'self'"
+  },
   "action": {
     "default_popup": "src/popup.html",
     "default_icon": {

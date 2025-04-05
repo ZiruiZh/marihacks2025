@@ -1,4 +1,3 @@
-import { handleFactCheck } from './background.js';
 let lastSelectedText = '';
 
 // Function to handle text selection
@@ -111,16 +110,25 @@ function showSelectionButton(selectedText) {
         });
         console.log('Stored selected text in chrome.storage');
         
-        // Call handleFactCheck directly with the selected text
-        const results = await handleFactCheck(selectedText);
-        console.log('Received results from handleFactCheck:', results);
-        
-        // Store the results
-        await chrome.storage.local.set({ 
-            results: results,
-            timestamp: Date.now()
+        // Send message to background script to handle fact checking
+        chrome.runtime.sendMessage({ 
+            action: 'factCheck',
+            text: selectedText
+        }, response => {
+            if (chrome.runtime.lastError) {
+                console.error('Error:', chrome.runtime.lastError);
+                displayError('Failed to process fact check');
+            } else if (response.error) {
+                console.error('Error:', response.error);
+                displayError(response.error);
+            } else if (response.results) {
+                console.log('Received results:', response.results);
+                chrome.storage.local.set({ 
+                    results: response.results,
+                    timestamp: Date.now()
+                });
+            }
         });
-        console.log('Stored results in chrome.storage');
         
         // Try to open the popup
         chrome.runtime.sendMessage({ action: 'openPopup' });

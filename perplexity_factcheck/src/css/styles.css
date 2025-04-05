@@ -38,12 +38,12 @@ body {
     -webkit-backdrop-filter: blur(10px);
     opacity: 1;
     transform: translateY(0);
-    transition: all 0.3s ease;
+    transition: opacity 0.3s ease, transform 0.3s ease;
 }
 
 .container.loading {
-    opacity: 0.05;
-    transform: translateY(20px);
+    opacity: 0;
+    transform: translateY(10px);
     pointer-events: none;
 }
 
@@ -408,75 +408,87 @@ input:checked + .theme-slider:before {
     left: 0;
     right: 0;
     bottom: 0;
-    width: 100%;
-    height: 100%;
     display: flex;
     flex-direction: column;
-    justify-content: center;
     align-items: center;
-    background: var(--gradient-start);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.95);
     z-index: 9999;
     opacity: 0;
-    pointer-events: none;
-    transition: all 0.3s ease;
-    transform: translateY(0);
-    margin-top: -180px; /* Moved up even more */
+    visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0.3s ease;
 }
 
 .loading-indicator.visible {
     opacity: 1;
-    pointer-events: auto;
-    transform: translateY(0);
+    visibility: visible;
 }
 
 .loading-dots {
     display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 16px;
-    margin-bottom: 24px;
+    gap: 12px;
+    margin-bottom: 20px;
 }
 
 .dot {
-    width: 8px;
-    height: 8px;
-    background: var(--text-primary);
+    width: 12px;
+    height: 12px;
+    background-color: #ffffff;
     border-radius: 50%;
-    position: relative;
-    opacity: 0.3;
+    opacity: 0.7;
+    animation: pulse 1s infinite ease-in-out;
 }
 
 .dot:nth-child(1) {
-    animation: fadeInOut 1.2s ease-in-out infinite;
+    animation-delay: -0.32s;
 }
 
 .dot:nth-child(2) {
-    animation: fadeInOut 1.2s ease-in-out infinite 0.4s;
+    animation-delay: -0.16s;
 }
 
-.dot:nth-child(3) {
-    animation: fadeInOut 1.2s ease-in-out infinite 0.8s;
-}
-
-@keyframes fadeInOut {
-    0%, 100% { opacity: 0.3; }
-    50% { opacity: 1; }
+@keyframes pulse {
+    0%, 100% {
+        transform: scale(0.3);
+        opacity: 0.3;
+    }
+    50% {
+        transform: scale(1);
+        opacity: 1;
+    }
 }
 
 .loading-indicator p {
-    margin: 16px 0 0 0;
-    color: var(--text-secondary);
-    font-size: 13px;
-    font-weight: 400;
+    color: #ffffff;
+    font-size: 16px;
+    margin: 0;
     font-family: var(--font-sans);
+    font-weight: 500;
     letter-spacing: -0.01em;
 }
 
-/* Remove old spinner styles */
-.spinner {
-    display: none;
+/* Light theme overrides */
+:root[data-theme="light"] .loading-indicator {
+    background: rgba(255, 255, 255, 0.95);
+}
+
+:root[data-theme="light"] .dot {
+    background-color: #000000;
+}
+
+:root[data-theme="light"] .loading-indicator p {
+    color: #000000;
+}
+
+/* Container fade effect when loading */
+.container {
+    transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.container.loading {
+    opacity: 0;
+    transform: translateY(10px);
+    pointer-events: none;
 }
 
 .results-content {
@@ -488,12 +500,19 @@ input:checked + .theme-slider:before {
 }
 
 .error-content {
-    padding: 20px;
-    margin: 20px 0;
-    background-color: #ffebee;
-    color: #c62828;
+    padding: 12px;
+    margin: 10px 0;
     border-radius: 8px;
-    white-space: pre-wrap;
+    background-color: #fde8e8;
+    color: #e53e3e;
+    font-size: 14px;
+    line-height: 1.5;
+    text-align: center;
+}
+
+[data-theme="dark"] .error-content {
+    background-color: #433;
+    color: #f56565;
 }
 
 .section-header {
@@ -562,33 +581,6 @@ input:checked + .theme-slider:before {
 
 :root[data-theme="light"] .loading-indicator p {
     color: #000000;
-}
-
-/* Update loading dots animation */
-.dot {
-    width: 8px;
-    height: 8px;
-    background: var(--text-primary);
-    border-radius: 50%;
-    position: relative;
-    opacity: 0.3;
-}
-
-.dot:nth-child(1) {
-    animation: fadeInOut 1.2s ease-in-out infinite;
-}
-
-.dot:nth-child(2) {
-    animation: fadeInOut 1.2s ease-in-out infinite 0.4s;
-}
-
-.dot:nth-child(3) {
-    animation: fadeInOut 1.2s ease-in-out infinite 0.8s;
-}
-
-@keyframes fadeInOut {
-    0%, 100% { opacity: 0.3; }
-    50% { opacity: 1; }
 }
 
 .button-group {
