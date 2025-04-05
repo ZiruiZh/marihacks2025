@@ -1,130 +1,192 @@
 document.addEventListener('DOMContentLoaded', function() {
-    const truthLabel = document.getElementById('truth-label');
-    const percentageValue = document.getElementById('percentage-value');
-    const highlightedContent = document.getElementById('highlighted-content');
-    const contextContent = document.getElementById('context-content');
-    const contextDate = document.getElementById('context-date');
-    const leftSources = document.getElementById('left-sources');
-    const rightSources = document.getElementById('right-sources');
-    const centerSources = document.getElementById('center-sources');
-    const leftBias = document.getElementById('left-bias');
-    const rightBias = document.getElementById('right-bias');
-    const centerBias = document.getElementById('center-bias');
-    const leftMeter = document.getElementById('left-meter');
-    const rightMeter = document.getElementById('right-meter');
-    const centerMeter = document.getElementById('center-meter');
-    const loadingElement = document.getElementById('loading');
-    const themeToggle = document.getElementById('theme-toggle');
-    const themeLabel = document.querySelector('.theme-toggle-label');
+    // Get all DOM elements
+    const elements = {
+        truthLabel: document.getElementById('truth-label'),
+        percentageValue: document.getElementById('percentage-value'),
+        highlightedContent: document.getElementById('highlightedContent'),
+        contextContent: document.getElementById('context-content'),
+        contextDate: document.getElementById('context-date'),
+        leftSources: document.getElementById('left-sources'),
+        rightSources: document.getElementById('right-sources'),
+        centerSources: document.getElementById('center-sources'),
+        leftBias: document.getElementById('left-bias'),
+        rightBias: document.getElementById('right-bias'),
+        centerBias: document.getElementById('center-bias'),
+        leftMeter: document.getElementById('left-meter'),
+        rightMeter: document.getElementById('right-meter'),
+        centerMeter: document.getElementById('center-meter'),
+        themeToggle: document.getElementById('theme-toggle'),
+        themeLabel: document.querySelector('.theme-toggle-label'),
+        resultsContent: document.getElementById('resultsContent'),
+        errorContent: document.getElementById('errorContent'),
+        loadingIndicator: document.getElementById('loadingIndicator')
+    };
 
-    // Show loading screen immediately
-    loadingElement.classList.remove('hidden');
+    // Log missing elements
+    Object.entries(elements).forEach(([key, element]) => {
+        if (!element) {
+            console.error(`Element not found: ${key}`);
+        }
+    });
 
     // Load saved theme preference
     chrome.storage.local.get(['theme'], function(result) {
-        if (result.theme === 'light') {
+        if (result.theme === 'light' && elements.themeToggle && elements.themeLabel) {
             document.documentElement.setAttribute('data-theme', 'light');
-            themeToggle.checked = true;
-            themeLabel.textContent = 'Dark';
+            elements.themeToggle.checked = true;
+            elements.themeLabel.textContent = 'Dark';
         }
     });
 
     // Handle theme toggle
-    themeToggle.addEventListener('change', function() {
-        if (this.checked) {
-            document.documentElement.setAttribute('data-theme', 'light');
-            themeLabel.textContent = 'Dark';
-            chrome.storage.local.set({ theme: 'light' });
-        } else {
-            document.documentElement.removeAttribute('data-theme');
-            themeLabel.textContent = 'Light';
-            chrome.storage.local.set({ theme: 'dark' });
-        }
+    if (elements.themeToggle) {
+        elements.themeToggle.addEventListener('change', function() {
+            if (this.checked) {
+                document.documentElement.setAttribute('data-theme', 'light');
+                if (elements.themeLabel) {
+                    elements.themeLabel.textContent = 'Dark';
+                }
+                chrome.storage.local.set({ theme: 'light' });
+            } else {
+                document.documentElement.removeAttribute('data-theme');
+                if (elements.themeLabel) {
+                    elements.themeLabel.textContent = 'Light';
+                }
+                chrome.storage.local.set({ theme: 'dark' });
+            }
+        });
+    }
+
+    // Function to update UI with latest data
+    function updateUIWithLatestData() {
+        chrome.storage.local.get(['selectedText', 'results', 'error', 'status', 'timestamp'], function(data) {
+            console.log('Updating UI with data:', data);
+            
+            if (data.selectedText) {
+                updateHighlightedText(data.selectedText);
+            }
+
+            if (data.status === 'analyzing') {
+                showLoading();
+            } else if (data.status === 'completed' && data.results && data.timestamp && (Date.now() - data.timestamp < 60000)) {
+                displayResults(data.results);
+            } else if (data.status === 'error' || data.error) {
+                displayError(data.error || 'An error occurred during analysis');
+            }
+        });
+    }
+
+    // Update UI immediately when popup opens
+    updateUIWithLatestData();
+
+    // Set up a periodic check for updates (every 2 seconds)
+    const updateInterval = setInterval(updateUIWithLatestData, 2000);
+
+    // Clean up interval when popup closes
+    window.addEventListener('unload', function() {
+        clearInterval(updateInterval);
     });
 
-    // Check for stored text and results
-    chrome.storage.local.get(['selectedText', 'results', 'error'], function(data) {
-        console.log('Retrieved storage data:', data);
+    // Listen for real-time messages from background script
+    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+        console.log('Popup received message:', message);
         
-        if (data.selectedText) {
-            console.log('Found selected text:', data.selectedText);
-            updateHighlightedText(data.selectedText);
-        }
-
-        if (data.results) {
-            console.log('Found results:', data.results);
-            displayResults(data.results);
-            loadingElement.classList.add('hidden');
-        } else if (data.error) {
-            console.log('Found error:', data.error);
-            displayError(data.error);
-            loadingElement.classList.add('hidden');
+        if (message.action === 'displayResults') {
+            displayResults(message.results);
+        } else if (message.action === 'displayError') {
+            displayError(message.error);
         }
     });
 
-    // Function to update highlighted text with animation
-    function updateHighlightedText(text) {
-        const highlightedContent = document.getElementById('highlighted-content');
-        if (highlightedContent) {
-            highlightedContent.innerHTML = '';
-            const textNode = document.createTextNode(text);
-            highlightedContent.appendChild(textNode);
-            console.log('Updated highlighted text');
-        }
+    function hideAll() {
+        if (elements.loadingIndicator) elements.loadingIndicator.style.display = 'none';
+        if (elements.resultsContent) elements.resultsContent.style.display = 'none';
+        if (elements.errorContent) elements.errorContent.style.display = 'none';
     }
 
-    // Function to display results
+    function showLoading() {
+        hideAll();
+        if (elements.loadingIndicator) elements.loadingIndicator.style.display = 'block';
+    }
+
     function displayResults(results) {
+        hideAll();
+        
+        // Parse the results string
+        const truthMatch = results.match(/(\d+)%/);
+        const truthPercentage = truthMatch ? truthMatch[1] : '--';
+        
+        // Split the results into sections (assuming format: "X% \n\n Summary \n\n Sources")
+        const sections = results.split('\n\n');
+        const summary = sections[1] || '';
+        const sources = sections[2] ? sections[2].replace('Sources:', '').split(',').map(s => s.trim()) : [];
+
         // Update truth percentage
-        const truthPercentage = document.getElementById('percentage-value');
-        const truthLabel = document.getElementById('truth-label');
-        if (truthPercentage && truthLabel) {
-            truthPercentage.textContent = `${results.truth_percentage}%`;
-            truthLabel.textContent = results.truth_label;
+        if (elements.percentageValue) {
+            elements.percentageValue.textContent = `${truthPercentage}%`;
+        }
+        if (elements.truthLabel) {
+            elements.truthLabel.textContent = truthPercentage >= 70 ? 'True' : 'False';
         }
 
-        // Update context
-        const contextContent = document.getElementById('context-content');
-        if (contextContent) {
-            contextContent.textContent = results.context;
+        // Update context content with just the summary
+        if (elements.contextContent) {
+            elements.contextContent.textContent = summary;
+        }
+        if (elements.contextDate) {
+            elements.contextDate.textContent = new Date().toLocaleDateString();
         }
 
-        // Update sources
-        const leftSources = document.getElementById('left-sources');
-        const rightSources = document.getElementById('right-sources');
-        const centerSources = document.getElementById('center-sources');
-        if (leftSources && rightSources && centerSources) {
-            leftSources.textContent = results.left_sources.join('\n');
-            rightSources.textContent = results.right_sources.join('\n');
-            centerSources.textContent = results.center_sources.join('\n');
+        // Update sources in their respective sections
+        const sourceCount = sources.length;
+        if (sourceCount > 0) {
+            // Add sources header to context content
+            if (elements.contextContent) {
+                elements.contextContent.textContent = `${summary}\n\nSources:`;
+            }
+
+            // Distribute sources evenly
+            const leftSources = sources.slice(0, Math.ceil(sourceCount/3));
+            const centerSources = sources.slice(Math.ceil(sourceCount/3), Math.ceil(2*sourceCount/3));
+            const rightSources = sources.slice(Math.ceil(2*sourceCount/3));
+
+            if (elements.leftSources) {
+                elements.leftSources.textContent = leftSources.join('\n');
+            }
+            if (elements.centerSources) {
+                elements.centerSources.textContent = centerSources.join('\n');
+            }
+            if (elements.rightSources) {
+                elements.rightSources.textContent = rightSources.join('\n');
+            }
         }
 
-        // Update bias meters
-        const leftMeter = document.getElementById('left-meter');
-        const rightMeter = document.getElementById('right-meter');
-        const centerMeter = document.getElementById('center-meter');
-        if (leftMeter && rightMeter && centerMeter) {
-            leftMeter.style.transform = `scaleX(${results.left_bias / 100})`;
-            rightMeter.style.transform = `scaleX(${results.right_bias / 100})`;
-            centerMeter.style.transform = `scaleX(${results.center_bias / 100})`;
+        // Update bias meters (without percentage text)
+        if (elements.leftMeter) {
+            elements.leftMeter.style.width = '30%';
+            if (elements.leftBias) elements.leftBias.textContent = '';
         }
-
-        // Update bias percentages
-        const leftBias = document.getElementById('left-bias');
-        const rightBias = document.getElementById('right-bias');
-        const centerBias = document.getElementById('center-bias');
-        if (leftBias && rightBias && centerBias) {
-            leftBias.textContent = `${results.left_bias}%`;
-            rightBias.textContent = `${results.right_bias}%`;
-            centerBias.textContent = `${results.center_bias}%`;
+        if (elements.centerMeter) {
+            elements.centerMeter.style.width = '40%';
+            if (elements.centerBias) elements.centerBias.textContent = '';
+        }
+        if (elements.rightMeter) {
+            elements.rightMeter.style.width = '30%';
+            if (elements.rightBias) elements.rightBias.textContent = '';
         }
     }
 
-    // Function to display error
     function displayError(error) {
-        const highlightedContent = document.getElementById('highlighted-content');
-        if (highlightedContent) {
-            highlightedContent.textContent = error;
+        hideAll();
+        if (elements.errorContent) {
+            elements.errorContent.style.display = 'block';
+            elements.errorContent.textContent = error;
+        }
+    }
+
+    function updateHighlightedText(text) {
+        if (elements.highlightedContent) {
+            elements.highlightedContent.textContent = text;
         }
     }
 });
