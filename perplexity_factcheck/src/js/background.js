@@ -30,7 +30,7 @@ chrome.runtime.onInstalled.addListener(() => {
     chrome.contextMenus.removeAll(() => {
         chrome.contextMenus.create({
             id: 'factCheck',
-            title: 'Fact Check with Perplexity',
+            title: 'Fact Check with Truthy',
             contexts: ['selection']
         });
     });
@@ -55,14 +55,14 @@ async function handleFactCheck(text) {
             messages: [
                 {
                     role: "system",
-                    content: "Your response MUST contain ONLY the following: 1. Truth Percentage: Provide a single number followed immediately by a % sign (e.g., 85%) to represent the factual accuracy of the statement. (Treat any partially false statements as false.) 2. Summary: Summarize your research in a maximum of two sentences without footnotes nor bolding. 3. Sources: List the 5 most credible and relevant source URLs, separated by commas."
+                    content: "You are a fact-checking assistant. Your response MUST be in the following format:\n\nTruth Percentage: [number]%\n\nContext: [2-3 sentence summary]\n\nSources:\n1. [URL]\n2. [URL]\n3. [URL]\n4. [URL]\n5. [URL]\n\nIMPORTANT: You MUST provide exactly 5 sources. Each source must be a valid URL. Do not include any additional text or explanations."
                 },
                 {
                     role: "user",
                     content: text
                 }
             ],
-            max_tokens: 256,
+            max_tokens: 512,
             temperature: 0.2,
             top_p: 0.9,
             web_search_options: {
@@ -100,7 +100,39 @@ async function handleFactCheck(text) {
 
         const result = data.choices[0].message.content;
         console.log('Extracted result:', result);
-        return result;
+        
+        // Parse the result into a structured format
+        const lines = result.split('\n');
+        const sources = [];
+        
+        // Find the sources section
+        let inSourcesSection = false;
+        for (const line of lines) {
+            if (line.toLowerCase().includes('sources:')) {
+                inSourcesSection = true;
+                continue;
+            }
+            
+            if (inSourcesSection) {
+                const urlMatch = line.match(/https?:\/\/[^\s]+/);
+                if (urlMatch) {
+                    sources.push(urlMatch[0].replace(/[.,]+$/, ''));
+                }
+            }
+        }
+        
+        // Ensure we have exactly 5 sources
+        if (sources.length !== 5) {
+            throw new Error(`Expected 5 sources but got ${sources.length}`);
+        }
+        
+        const parsedResult = {
+            truthPercentage: parseInt(lines[0].match(/\d+/)[0]),
+            context: lines[2].replace('Context: ', ''),
+            sources: sources
+        };
+        
+        return JSON.stringify(parsedResult);
     } catch (error) {
         console.error('Error in handleFactCheck:', error);
         throw error;
