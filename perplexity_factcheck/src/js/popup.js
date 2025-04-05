@@ -1,12 +1,20 @@
 document.addEventListener('DOMContentLoaded', function() {
     const highlightedContent = document.getElementById('highlightedContent');
     
+    // Show loading immediately when popup opens
+    showLoading();
+    
     // Load saved text content when popup opens
-    chrome.storage.local.get(['savedText', 'selectedText'], function(result) {
+    chrome.storage.local.get(['savedText', 'selectedText', 'results', 'status'], function(result) {
         if (result.savedText) {
             highlightedContent.textContent = result.savedText;
         } else if (result.selectedText) {
             highlightedContent.textContent = result.selectedText;
+        }
+        
+        // If we have recent results, display them
+        if (result.results && result.status === 'completed') {
+            displayResults(result.results);
         }
     });
 
@@ -18,18 +26,29 @@ document.addEventListener('DOMContentLoaded', function() {
             const text = this.textContent.trim();
             
             if (text && text !== 'Highlight any text on the webpage to fact-check it') {
-                // Show loading indicator
-                showLoading();
+                showLoading(); // Show loading when sending
                 
                 try {
-                    // Send message to background script to process the text
-                    const response = await chrome.runtime.sendMessage({
-                        action: 'factCheck',
-                        text: text
+                    // Send message to background script and wait for response
+                    const response = await new Promise((resolve, reject) => {
+                        chrome.runtime.sendMessage({
+                            action: 'factCheck',
+                            text: text
+                        }, response => {
+                            if (chrome.runtime.lastError) {
+                                reject(chrome.runtime.lastError);
+                            } else if (response.error) {
+                                reject(new Error(response.error));
+                            } else {
+                                resolve(response);
+                            }
+                        });
                     });
                     
                     // Update the UI with the results
-                    displayResults(response.results);
+                    if (response.results) {
+                        displayResults(response.results);
+                    }
                 } catch (error) {
                     console.error('Error:', error);
                     displayError('Error processing the text. Please try again.');
@@ -126,13 +145,12 @@ document.addEventListener('DOMContentLoaded', function() {
         if (message.action === 'displayResults') {
             displayResults(message.results);
         } else if (message.action === 'displayError') {
+            hideLoading();
             displayError(message.error);
         } else if (message.action === 'updateSelectedText') {
             const highlightedContent = document.getElementById('highlightedContent');
-            // Only update if the content is not being edited
             if (!highlightedContent.matches(':focus')) {
                 highlightedContent.textContent = message.text;
-                // Update both savedText and selectedText
                 chrome.storage.local.set({ 
                     savedText: message.text,
                     selectedText: message.text
@@ -146,35 +164,52 @@ document.addEventListener('DOMContentLoaded', function() {
         const resultsContent = document.getElementById('resultsContent');
         const errorContent = document.getElementById('errorContent');
         
-        if (loadingIndicator) loadingIndicator.classList.remove('visible');
+        if (loadingIndicator) {
+            loadingIndicator.classList.remove('visible');
+            document.querySelector('.container').classList.remove('loading');
+        }
         if (resultsContent) resultsContent.style.display = 'none';
         if (errorContent) errorContent.style.display = 'none';
     }
 
     function showLoading() {
-        const container = document.querySelector('.container');
         const loadingIndicator = document.getElementById('loadingIndicator');
+        const container = document.querySelector('.container');
+        const loadingText = loadingIndicator.querySelector('p');
         
-        // Add loading class to container to fade it out
-        container.classList.add('loading');
-        
-        // Show loading indicator with animation
-        requestAnimationFrame(() => {
+        if (loadingIndicator && container) {
+            // Update loading text
+            if (loadingText) {
+                loadingText.textContent = "Fact-checking information...";
+            }
+            
+            // Show loading indicator
             loadingIndicator.classList.add('visible');
-        });
+            container.classList.add('loading');
+            
+            // Update colors based on theme
+            const isDarkMode = !document.documentElement.hasAttribute('data-theme') || 
+                              document.documentElement.getAttribute('data-theme') !== 'light';
+            
+            const dots = loadingIndicator.querySelectorAll('.dot');
+            dots.forEach(dot => {
+                dot.style.backgroundColor = isDarkMode ? '#ffffff' : '#000000';
+            });
+            
+            if (loadingText) {
+                loadingText.style.color = isDarkMode ? '#ffffff' : '#000000';
+            }
+        }
     }
 
     function hideLoading() {
-        const container = document.querySelector('.container');
         const loadingIndicator = document.getElementById('loadingIndicator');
+        const container = document.querySelector('.container');
         
-        // Hide loading indicator
-        loadingIndicator.classList.remove('visible');
-        
-        // Wait for loading indicator to fade out before showing content
-        setTimeout(() => {
+        if (loadingIndicator && container) {
+            loadingIndicator.classList.remove('visible');
             container.classList.remove('loading');
-        }, 300);
+        }
     }
 
     async function fetchSourceTitle(url) {
@@ -196,10 +231,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function displayResults(results) {
         try {
-            // Parse the JSON response
-            const parsedResults = JSON.parse(results);
+            // Parse the JSON response if it's a string
+            const parsedResults = typeof results === 'string' ? JSON.parse(results) : results;
             
-            // Hide loading with animation
+            // Hide loading indicator
             hideLoading();
             
             // Update truth percentage
@@ -449,18 +484,29 @@ document.addEventListener('DOMContentLoaded', function() {
         const text = highlightedContent.textContent.trim();
         
         if (text && text !== 'Highlight any text on the webpage to fact-check it') {
-            // Show loading indicator
-            showLoading();
+            showLoading(); // Show loading when sending
             
             try {
-                // Send message to background script to process the text
-                const response = await chrome.runtime.sendMessage({
-                    action: 'factCheck',
-                    text: text
+                // Send message to background script and wait for response
+                const response = await new Promise((resolve, reject) => {
+                    chrome.runtime.sendMessage({
+                        action: 'factCheck',
+                        text: text
+                    }, response => {
+                        if (chrome.runtime.lastError) {
+                            reject(chrome.runtime.lastError);
+                        } else if (response.error) {
+                            reject(new Error(response.error));
+                        } else {
+                            resolve(response);
+                        }
+                    });
                 });
                 
                 // Update the UI with the results
-                displayResults(response.results);
+                if (response.results) {
+                    displayResults(response.results);
+                }
             } catch (error) {
                 console.error('Error:', error);
                 displayError('Error processing the text. Please try again.');

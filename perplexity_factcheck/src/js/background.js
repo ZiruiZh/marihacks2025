@@ -6,22 +6,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         handleFactCheck(message.text)
             .then(response => {
                 console.log('Fact check completed successfully');
-                chrome.runtime.sendMessage({
-                    action: 'displayResults',
-                    results: response
-                });
+                sendResponse({ results: response });
             })
             .catch(error => {
                 console.error('Fact check failed:', error);
-                chrome.runtime.sendMessage({
-                    action: 'displayError',
-                    error: error.message
-                });
+                sendResponse({ error: error.message });
             });
-        return true;
+        return true; // Keep the message channel open for async response
     } else if (message.action === 'openPopup') {
         console.log('Opening popup...');
         chrome.action.openPopup();
+        return false;
     }
 });
 
@@ -70,11 +65,6 @@ async function handleFactCheck(text) {
             }
         })
     };
-
-    console.log('Making API request with options:', {
-        ...options,
-        body: JSON.parse(options.body) // Log the parsed body for better readability
-    });
 
     try {
         const response = await fetch('https://api.perplexity.ai/chat/completions', options);
@@ -160,16 +150,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
                 action: 'updateSelectedText',
                 text: info.selectionText
             });
-        } catch (error) {
-            console.log('Could not open popup directly:', error);
-            chrome.action.setBadgeText({ text: "!" });
-            chrome.action.setBadgeBackgroundColor({ color: "#ff4593" });
-            setTimeout(() => {
-                chrome.action.setBadgeText({ text: "" });
-            }, 3000);
-        }
 
-        try {
             // Call the API and store results
             const results = await handleFactCheck(info.selectionText);
             await chrome.storage.local.set({
