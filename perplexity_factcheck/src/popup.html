@@ -1,76 +1,136 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Perplexity Fact Check</title>
+    <title>Truthly</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/styles.css">
     <meta charset="UTF-8">
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>Perplexity Fact Check</h1>
+            <h1>Truthly</h1>
+            <p class="subtitle">The fact checker for anything and everything, backed up by sources</p>
             <div class="theme-toggle">
                 <label class="theme-switch">
                     <input type="checkbox" id="theme-toggle">
                     <span class="theme-slider"></span>
                 </label>
+                <span class="theme-toggle-label">Light</span>
             </div>
             <div class="truth-section">
-                <span class="truth-question">is this true?</span>
-                <span id="truth-label" class="truth-label">analyzing...</span>
-                <div id="truth-percentage" class="truth-percentage">
-                    <span id="percentage-value">--%</span>
+                <div class="truth-percentage-container">
+                    <span>Truth percentage</span>
+                    <div id="truth-percentage" class="truth-percentage">
+                        <span id="percentage-value">--%</span>
+                    </div>
+                </div>
+                <div class="truth-result">
+                    <div id="truth-label" class="truth-label">analyzing...</div>
                 </div>
             </div>
         </div>
 
         <div class="highlighted-section">
-            <h2>Selected Text</h2>
-            <div id="highlightedContent" class="highlighted-content">
+            <div class="section-header">
+                <h2>Selected Text</h2>
+                <div class="button-group">
+                    <button class="copy-button" data-copy-target="highlightedContent">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                        </svg>
+                    </button>
+                    <button id="sendButton" class="send-button">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M22 2L11 13"></path>
+                            <path d="M22 2L15 22L11 13L2 9L22 2Z"></path>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <div id="highlightedContent" class="highlighted-content selectable" contenteditable="true">
                 <span class="placeholder">Highlight any text on the webpage to fact-check it</span>
             </div>
         </div>
 
         <div class="context-section">
-            <h2>Context: <span id="context-date" class="date"></span></h2>
-            <div id="context-content" class="context-content">
+            <div class="section-header">
+                <h2>Context</h2>
+                <button class="copy-button" data-copy-target="context-content">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                    </svg>
+                </button>
+            </div>
+            <div id="context-content" class="context-content selectable">
                 <span class="source-content">Waiting for analysis...</span>
             </div>
         </div>
 
         <div class="sources-section">
-            <div class="source-category">
-                <div class="source-header">
-                    <div class="bias-meter-container">
-                        <div class="bias-meter">
-                            <div id="left-meter" class="meter-fill left-meter"></div>
-                        </div>
-                        <span id="left-bias" class="bias-percentage">--%</span>
-                    </div>
-                </div>
-                <span class="source-content" id="left-sources">Loading sources...</span>
+            <div class="section-header">
+                <h2>Sources:</h2>
             </div>
-            <div class="source-category">
-                <div class="source-header">
-                    <div class="bias-meter-container">
-                        <div class="bias-meter">
-                            <div id="right-meter" class="meter-fill right-meter"></div>
-                        </div>
-                        <span id="right-bias" class="bias-percentage">--%</span>
+            <div id="sources-content" class="source-bubbles">
+                <div class="source-bubble" id="source-1">
+                    <div class="source-content">
+                        <a href="#" target="_blank" class="source-link">Loading source...</a>
+                        <button class="copy-source-button" data-source-id="source-1">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                            </svg>
+                        </button>
                     </div>
                 </div>
-                <span class="source-content" id="right-sources">Loading sources...</span>
-            </div>
-            <div class="source-category">
-                <div class="source-header">
-                    <div class="bias-meter-container">
-                        <div class="bias-meter">
-                            <div id="center-meter" class="meter-fill center-meter"></div>
-                        </div>
-                        <span id="center-bias" class="bias-percentage">--%</span>
+                <div class="source-bubble" id="source-2">
+                    <div class="source-content">
+                        <a href="#" target="_blank" class="source-link">Loading source...</a>
+                        <button class="copy-source-button" data-source-id="source-2">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                            </svg>
+                        </button>
                     </div>
                 </div>
-                <span class="source-content" id="center-sources">Loading sources...</span>
+                <div class="source-bubble" id="source-3">
+                    <div class="source-content">
+                        <a href="#" target="_blank" class="source-link">Loading source...</a>
+                        <button class="copy-source-button" data-source-id="source-3">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="source-bubble" id="source-4">
+                    <div class="source-content">
+                        <a href="#" target="_blank" class="source-link">Loading source...</a>
+                        <button class="copy-source-button" data-source-id="source-4">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="source-bubble" id="source-5">
+                    <div class="source-content">
+                        <a href="#" target="_blank" class="source-link">Loading source...</a>
+                        <button class="copy-source-button" data-source-id="source-5">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -78,18 +138,19 @@
             <p>^ Recently accessed</p>
         </div>
 
-        <div id="loadingIndicator" class="loading-indicator" style="display: none;">
-            <div class="spinner"></div>
-            <p>Analyzing...</p>
+        <div id="loadingIndicator" class="loading-indicator">
+            <div class="loading-dots">
+                <div class="dot"></div>
+                <div class="dot"></div>
+                <div class="dot"></div>
+            </div>
+            <p>thinking</p>
         </div>
 
         <div id="resultsContent" class="results-content" style="display: none;">
             <!-- Results will be displayed here -->
         </div>
 
-        <div id="errorContent" class="error-content" style="display: none;">
-            <!-- Errors will be displayed here -->
-        </div>
     </div>
     <script src="js/popup.js"></script>
 </body>

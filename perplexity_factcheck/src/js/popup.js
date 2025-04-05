@@ -1,20 +1,84 @@
 document.addEventListener('DOMContentLoaded', function() {
+    const highlightedContent = document.getElementById('highlightedContent');
+    
+    // Load saved text content when popup opens
+    chrome.storage.local.get(['savedText', 'selectedText'], function(result) {
+        if (result.savedText) {
+            highlightedContent.textContent = result.savedText;
+        } else if (result.selectedText) {
+            highlightedContent.textContent = result.selectedText;
+        }
+    });
+
+    // Add keydown event listener for Enter key
+    highlightedContent.addEventListener('keydown', async function(e) {
+        // Check if Enter was pressed without Shift (Shift+Enter allows for new lines)
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault(); // Prevent default Enter behavior
+            const text = this.textContent.trim();
+            
+            if (text && text !== 'Highlight any text on the webpage to fact-check it') {
+                // Show loading indicator
+                showLoading();
+                
+                try {
+                    // Send message to background script to process the text
+                    const response = await chrome.runtime.sendMessage({
+                        action: 'factCheck',
+                        text: text
+                    });
+                    
+                    // Update the UI with the results
+                    displayResults(response.results);
+                } catch (error) {
+                    console.error('Error:', error);
+                    displayError('Error processing the text. Please try again.');
+                }
+            }
+        }
+    });
+
+    // Save text content when it changes
+    highlightedContent.addEventListener('input', function() {
+        const text = this.textContent.trim();
+        chrome.storage.local.set({ 
+            savedText: text,
+            selectedText: text // Also update selectedText to maintain consistency
+        });
+    });
+
+    // Add blur event handler for the editable content
+    highlightedContent.addEventListener('blur', function() {
+        const text = this.textContent.trim();
+        if (!text) {
+            // If the content is empty, restore the placeholder
+            this.innerHTML = '<span class="placeholder">Highlight any text on the webpage to fact-check it</span>';
+            chrome.storage.local.remove(['savedText', 'selectedText']);
+        } else {
+            // Otherwise, just keep the text content
+            this.textContent = text;
+            chrome.storage.local.set({ 
+                savedText: text,
+                selectedText: text // Also update selectedText to maintain consistency
+            });
+        }
+    });
+
+    // Add focus event handler to remove placeholder
+    highlightedContent.addEventListener('focus', function() {
+        const placeholder = this.querySelector('.placeholder');
+        if (placeholder) {
+            placeholder.remove();
+        }
+    });
+
     // Get all DOM elements
     const elements = {
         truthLabel: document.getElementById('truth-label'),
         percentageValue: document.getElementById('percentage-value'),
-        highlightedContent: document.getElementById('highlightedContent'),
+        highlightedContent: highlightedContent,
         contextContent: document.getElementById('context-content'),
-        contextDate: document.getElementById('context-date'),
-        leftSources: document.getElementById('left-sources'),
-        rightSources: document.getElementById('right-sources'),
-        centerSources: document.getElementById('center-sources'),
-        leftBias: document.getElementById('left-bias'),
-        rightBias: document.getElementById('right-bias'),
-        centerBias: document.getElementById('center-bias'),
-        leftMeter: document.getElementById('left-meter'),
-        rightMeter: document.getElementById('right-meter'),
-        centerMeter: document.getElementById('center-meter'),
+        sourceBubbles: Array.from({ length: 5 }, (_, i) => document.getElementById(`source-${i + 1}`)),
         themeToggle: document.getElementById('theme-toggle'),
         themeLabel: document.querySelector('.theme-toggle-label'),
         resultsContent: document.getElementById('resultsContent'),
@@ -57,21 +121,216 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Function to update UI with latest data
-    function updateUIWithLatestData() {
-        chrome.storage.local.get(['selectedText', 'results', 'error', 'status', 'timestamp'], function(data) {
-            console.log('Updating UI with data:', data);
+    // Update the message listener to handle text processing
+    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+        if (message.action === 'displayResults') {
+            displayResults(message.results);
+        } else if (message.action === 'displayError') {
+            displayError(message.error);
+        } else if (message.action === 'updateSelectedText') {
+            const highlightedContent = document.getElementById('highlightedContent');
+            // Only update if the content is not being edited
+            if (!highlightedContent.matches(':focus')) {
+                highlightedContent.textContent = message.text;
+                // Update both savedText and selectedText
+                chrome.storage.local.set({ 
+                    savedText: message.text,
+                    selectedText: message.text
+                });
+            }
+        }
+    });
+
+    function hideAll() {
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        const resultsContent = document.getElementById('resultsContent');
+        const errorContent = document.getElementById('errorContent');
+        
+        if (loadingIndicator) loadingIndicator.classList.remove('visible');
+        if (resultsContent) resultsContent.style.display = 'none';
+        if (errorContent) errorContent.style.display = 'none';
+    }
+
+    function showLoading() {
+        const container = document.querySelector('.container');
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        
+        // Add loading class to container to fade it out
+        container.classList.add('loading');
+        
+        // Show loading indicator with animation
+        requestAnimationFrame(() => {
+            loadingIndicator.classList.add('visible');
+        });
+    }
+
+    function hideLoading() {
+        const container = document.querySelector('.container');
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        
+        // Hide loading indicator
+        loadingIndicator.classList.remove('visible');
+        
+        // Wait for loading indicator to fade out before showing content
+        setTimeout(() => {
+            container.classList.remove('loading');
+        }, 300);
+    }
+
+    async function fetchSourceTitle(url) {
+        try {
+            const response = await fetch(url);
+            const html = await response.text();
+            const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+            const title = titleMatch ? titleMatch[1].trim() : null;
             
-            if (data.selectedText) {
-                updateHighlightedText(data.selectedText);
+            // Create a temporary element to decode HTML entities
+            const decoder = document.createElement('div');
+            decoder.innerHTML = title;
+            return decoder.textContent;
+        } catch (error) {
+            console.error('Error fetching title:', error);
+            return null;
+        }
+    }
+
+    function displayResults(results) {
+        try {
+            // Parse the JSON response
+            const parsedResults = JSON.parse(results);
+            
+            // Hide loading with animation
+            hideLoading();
+            
+            // Update truth percentage
+            if (elements.percentageValue) {
+                elements.percentageValue.textContent = `${parsedResults.truthPercentage}%`;
+            }
+            if (elements.truthLabel) {
+                elements.truthLabel.textContent = parsedResults.truthPercentage >= 70 ? 'True' : 'False';
+                elements.truthLabel.className = `truth-label ${parsedResults.truthPercentage >= 70 ? 'true' : 'false'}`;
             }
 
+            // Update context content
+            if (elements.contextContent) {
+                elements.contextContent.textContent = parsedResults.context;
+            }
+
+            // Update source bubbles
+            parsedResults.sources.forEach(async (source, index) => {
+                if (elements.sourceBubbles[index]) {
+                    const bubble = elements.sourceBubbles[index];
+                    const link = bubble.querySelector('a');
+                    if (link) {
+                        // Extract URL from the source text and clean it
+                        const urlMatch = source.match(/https?:\/\/[^\s]+/);
+                        if (urlMatch) {
+                            const url = urlMatch[0]
+                                .replace(/[.,]+$/, '') // Remove trailing periods or commas
+                                .replace(/&amp;/g, '&') // Replace HTML entities
+                                .replace(/&quot;/g, '"')
+                                .replace(/&#39;/g, "'")
+                                .replace(/&lt;/g, '<')
+                                .replace(/&gt;/g, '>')
+                                .replace(/&#44;/g, ',')
+                                .replace(/&#34;/g, '"')
+                                .replace(/&#x27;/g, "'")
+                                .replace(/&#x2C;/g, ',');
+                            
+                            link.href = url;
+                            link.target = '_blank';
+                            link.rel = 'noopener noreferrer';
+                            
+                            // Show the bubble
+                            bubble.style.display = 'block';
+                            
+                            // Get the title part of the source (everything before the URL)
+                            const titlePart = source.split(/https?:\/\//)[0].trim();
+                            
+                            // Create a temporary element to decode HTML entities in the title
+                            const decoder = document.createElement('div');
+                            decoder.innerHTML = titlePart;
+                            const decodedTitle = decoder.textContent;
+                            
+                            try {
+                                // If we have a title part, use it, otherwise fetch from URL
+                                if (decodedTitle) {
+                                    link.textContent = decodedTitle;
+                                } else {
+                                    const fetchedTitle = await fetchSourceTitle(url);
+                                    link.textContent = fetchedTitle || url;
+                                }
+                                // Store the URL as a data attribute for reference
+                                link.setAttribute('data-url', url);
+                            } catch (error) {
+                                console.error('Error handling title:', error);
+                                link.textContent = url;
+                            }
+                        } else {
+                            // If no URL found in this source, hide the bubble
+                            bubble.style.display = 'none';
+                        }
+                    }
+                }
+            });
+
+            // Hide any unused bubbles
+            for (let i = parsedResults.sources.length; i < 5; i++) {
+                if (elements.sourceBubbles[i]) {
+                    elements.sourceBubbles[i].style.display = 'none';
+                }
+            }
+
+            // Store the results in local storage
+            chrome.storage.local.set({
+                results: results,
+                status: 'completed',
+                timestamp: Date.now()
+            });
+        } catch (error) {
+            console.error('Error parsing results:', error);
+            displayError('Failed to parse fact-checking results');
+        }
+    }
+
+    function displayError(error) {
+        hideAll();
+        if (elements.errorContent) {
+            elements.errorContent.style.display = 'block';
+            elements.errorContent.textContent = error;
+        }
+    }
+
+    function updateUIWithLatestData() {
+        chrome.storage.local.get(['results', 'error', 'status', 'timestamp', 'selectedText'], function(data) {
+            console.log('Updating UI with data:', data);
+            
+            if (data.selectedText && elements.highlightedContent) {
+                elements.highlightedContent.textContent = data.selectedText;
+            }
+            
             if (data.status === 'analyzing') {
                 showLoading();
+                if (elements.percentageValue) {
+                    elements.percentageValue.textContent = '--%';
+                }
+                if (elements.truthLabel) {
+                    elements.truthLabel.textContent = 'analyzing...';
+                    elements.truthLabel.className = 'truth-label';
+                }
             } else if (data.status === 'completed' && data.results && data.timestamp && (Date.now() - data.timestamp < 60000)) {
                 displayResults(data.results);
             } else if (data.status === 'error' || data.error) {
                 displayError(data.error || 'An error occurred during analysis');
+            } else {
+                // Initial state
+                if (elements.percentageValue) {
+                    elements.percentageValue.textContent = '--%';
+                }
+                if (elements.truthLabel) {
+                    elements.truthLabel.textContent = 'analyzing...';
+                    elements.truthLabel.className = 'truth-label';
+                }
             }
         });
     }
@@ -87,106 +346,125 @@ document.addEventListener('DOMContentLoaded', function() {
         clearInterval(updateInterval);
     });
 
-    // Listen for real-time messages from background script
-    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-        console.log('Popup received message:', message);
-        
-        if (message.action === 'displayResults') {
-            displayResults(message.results);
-        } else if (message.action === 'displayError') {
-            displayError(message.error);
+    function copyToClipboard(elementId) {
+        const element = document.getElementById(elementId);
+        let textToCopy = '';
+
+        if (elementId === 'sources-content') {
+            // For sources, collect all source links
+            const sources = element.querySelectorAll('.source-link');
+            textToCopy = Array.from(sources)
+                .map(link => link.href)
+                .filter(href => href !== '#')
+                .join('\n');
+        } else {
+            // For other sections, copy the text content
+            textToCopy = element.textContent.trim();
         }
+
+        // Create a temporary textarea element
+        const textarea = document.createElement('textarea');
+        textarea.value = textToCopy;
+        document.body.appendChild(textarea);
+        
+        // Select and copy the text
+        textarea.select();
+        document.execCommand('copy');
+        
+        // Remove the temporary element
+        document.body.removeChild(textarea);
+
+        // Show feedback
+        const button = element.previousElementSibling.querySelector('.copy-button');
+        const originalHTML = button.innerHTML;
+        button.innerHTML = `
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M20 6L9 17l-5-5"></path>
+            </svg>
+        `;
+        
+        // Reset the button after 1 second
+        setTimeout(() => {
+            button.innerHTML = originalHTML;
+        }, 1000);
+    }
+
+    function copySourceUrl(sourceId) {
+        const sourceBubble = document.getElementById(sourceId);
+        if (!sourceBubble) return;
+        
+        const link = sourceBubble.querySelector('.source-link');
+        if (!link || !link.href || link.href === '#') return;
+        
+        // Create a temporary textarea element
+        const textarea = document.createElement('textarea');
+        textarea.value = link.href;
+        document.body.appendChild(textarea);
+        
+        // Select and copy the text
+        textarea.select();
+        document.execCommand('copy');
+        
+        // Remove the temporary element
+        document.body.removeChild(textarea);
+        
+        // Show feedback
+        const button = sourceBubble.querySelector('.copy-source-button');
+        const originalHTML = button.innerHTML;
+        button.innerHTML = `
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M20 6L9 17l-5-5"></path>
+            </svg>
+        `;
+        
+        // Reset the button after 1 second
+        setTimeout(() => {
+            button.innerHTML = originalHTML;
+        }, 1000);
+    }
+
+    // Add event listeners for copy buttons
+    document.querySelectorAll('.copy-button').forEach(button => {
+        button.addEventListener('click', function() {
+            const targetId = this.getAttribute('data-copy-target');
+            if (targetId) {
+                copyToClipboard(targetId);
+            }
+        });
     });
 
-    function hideAll() {
-        if (elements.loadingIndicator) elements.loadingIndicator.style.display = 'none';
-        if (elements.resultsContent) elements.resultsContent.style.display = 'none';
-        if (elements.errorContent) elements.errorContent.style.display = 'none';
-    }
+    // Add event listeners for source copy buttons
+    document.querySelectorAll('.copy-source-button').forEach(button => {
+        button.addEventListener('click', function() {
+            const sourceId = this.getAttribute('data-source-id');
+            if (sourceId) {
+                copySourceUrl(sourceId);
+            }
+        });
+    });
 
-    function showLoading() {
-        hideAll();
-        if (elements.loadingIndicator) elements.loadingIndicator.style.display = 'block';
-    }
-
-    function displayResults(results) {
-        hideAll();
+    // Add event listener for the send button
+    document.getElementById('sendButton').addEventListener('click', async () => {
+        const highlightedContent = document.getElementById('highlightedContent');
+        const text = highlightedContent.textContent.trim();
         
-        // Parse the results string
-        const truthMatch = results.match(/(\d+)%/);
-        const truthPercentage = truthMatch ? truthMatch[1] : '--';
-        
-        // Split the results into sections (assuming format: "X% \n\n Summary \n\n Sources")
-        const sections = results.split('\n\n');
-        const summary = sections[1] || '';
-        const sources = sections[2] ? sections[2].replace('Sources:', '').split(',').map(s => s.trim()) : [];
-
-        // Update truth percentage
-        if (elements.percentageValue) {
-            elements.percentageValue.textContent = `${truthPercentage}%`;
-        }
-        if (elements.truthLabel) {
-            elements.truthLabel.textContent = truthPercentage >= 70 ? 'True' : 'False';
-        }
-
-        // Update context content with just the summary
-        if (elements.contextContent) {
-            elements.contextContent.textContent = summary;
-        }
-        if (elements.contextDate) {
-            elements.contextDate.textContent = new Date().toLocaleDateString();
-        }
-
-        // Update sources in their respective sections
-        const sourceCount = sources.length;
-        if (sourceCount > 0) {
-            // Add sources header to context content
-            if (elements.contextContent) {
-                elements.contextContent.textContent = `${summary}\n\nSources:`;
-            }
-
-            // Distribute sources evenly
-            const leftSources = sources.slice(0, Math.ceil(sourceCount/3));
-            const centerSources = sources.slice(Math.ceil(sourceCount/3), Math.ceil(2*sourceCount/3));
-            const rightSources = sources.slice(Math.ceil(2*sourceCount/3));
-
-            if (elements.leftSources) {
-                elements.leftSources.textContent = leftSources.join('\n');
-            }
-            if (elements.centerSources) {
-                elements.centerSources.textContent = centerSources.join('\n');
-            }
-            if (elements.rightSources) {
-                elements.rightSources.textContent = rightSources.join('\n');
+        if (text && text !== 'Highlight any text on the webpage to fact-check it') {
+            // Show loading indicator
+            showLoading();
+            
+            try {
+                // Send message to background script to process the text
+                const response = await chrome.runtime.sendMessage({
+                    action: 'factCheck',
+                    text: text
+                });
+                
+                // Update the UI with the results
+                displayResults(response.results);
+            } catch (error) {
+                console.error('Error:', error);
+                displayError('Error processing the text. Please try again.');
             }
         }
-
-        // Update bias meters (without percentage text)
-        if (elements.leftMeter) {
-            elements.leftMeter.style.width = '30%';
-            if (elements.leftBias) elements.leftBias.textContent = '';
-        }
-        if (elements.centerMeter) {
-            elements.centerMeter.style.width = '40%';
-            if (elements.centerBias) elements.centerBias.textContent = '';
-        }
-        if (elements.rightMeter) {
-            elements.rightMeter.style.width = '30%';
-            if (elements.rightBias) elements.rightBias.textContent = '';
-        }
-    }
-
-    function displayError(error) {
-        hideAll();
-        if (elements.errorContent) {
-            elements.errorContent.style.display = 'block';
-            elements.errorContent.textContent = error;
-        }
-    }
-
-    function updateHighlightedText(text) {
-        if (elements.highlightedContent) {
-            elements.highlightedContent.textContent = text;
-        }
-    }
+    });
 });
