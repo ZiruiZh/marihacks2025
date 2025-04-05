@@ -6,15 +6,7 @@ document.addEventListener('DOMContentLoaded', function() {
         highlightedContent: document.getElementById('highlightedContent'),
         contextContent: document.getElementById('context-content'),
         contextDate: document.getElementById('context-date'),
-        leftSources: document.getElementById('left-sources'),
-        rightSources: document.getElementById('right-sources'),
-        centerSources: document.getElementById('center-sources'),
-        leftBias: document.getElementById('left-bias'),
-        rightBias: document.getElementById('right-bias'),
-        centerBias: document.getElementById('center-bias'),
-        leftMeter: document.getElementById('left-meter'),
-        rightMeter: document.getElementById('right-meter'),
-        centerMeter: document.getElementById('center-meter'),
+        sourceBubbles: Array.from({ length: 5 }, (_, i) => document.getElementById(`source-${i + 1}`)),
         themeToggle: document.getElementById('theme-toggle'),
         themeLabel: document.querySelector('.theme-toggle-label'),
         resultsContent: document.getElementById('resultsContent'),
@@ -109,70 +101,94 @@ document.addEventListener('DOMContentLoaded', function() {
         if (elements.loadingIndicator) elements.loadingIndicator.style.display = 'block';
     }
 
+    async function fetchSourceTitle(url) {
+        try {
+            const response = await fetch(url);
+            const html = await response.text();
+            const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+            return titleMatch ? titleMatch[1].trim() : null;
+        } catch (error) {
+            console.error('Error fetching title:', error);
+            return null;
+        }
+    }
+
     function displayResults(results) {
         hideAll();
         
-        // Parse the results string
-        const truthMatch = results.match(/(\d+)%/);
-        const truthPercentage = truthMatch ? truthMatch[1] : '--';
-        
-        // Split the results into sections (assuming format: "X% \n\n Summary \n\n Sources")
-        const sections = results.split('\n\n');
-        const summary = sections[1] || '';
-        const sources = sections[2] ? sections[2].replace('Sources:', '').split(',').map(s => s.trim()) : [];
+        try {
+            // Parse the JSON response
+            const parsedResults = JSON.parse(results);
+            
+            // Update truth percentage
+            if (elements.percentageValue) {
+                elements.percentageValue.textContent = `${parsedResults.truthPercentage}%`;
+            }
+            if (elements.truthLabel) {
+                elements.truthLabel.textContent = parsedResults.truthPercentage >= 70 ? 'True' : 'False';
+                elements.truthLabel.className = `truth-label ${parsedResults.truthPercentage >= 70 ? 'true' : 'false'}`;
+            }
 
-        // Update truth percentage
-        if (elements.percentageValue) {
-            elements.percentageValue.textContent = `${truthPercentage}%`;
-        }
-        if (elements.truthLabel) {
-            elements.truthLabel.textContent = truthPercentage >= 70 ? 'True' : 'False';
-        }
-
-        // Update context content with just the summary
-        if (elements.contextContent) {
-            elements.contextContent.textContent = summary;
-        }
-        if (elements.contextDate) {
-            elements.contextDate.textContent = new Date().toLocaleDateString();
-        }
-
-        // Update sources in their respective sections
-        const sourceCount = sources.length;
-        if (sourceCount > 0) {
-            // Add sources header to context content
+            // Update context content
             if (elements.contextContent) {
-                elements.contextContent.textContent = `${summary}\n\nSources:`;
+                elements.contextContent.textContent = parsedResults.context;
+            }
+            if (elements.contextDate) {
+                elements.contextDate.textContent = new Date().toLocaleDateString();
             }
 
-            // Distribute sources evenly
-            const leftSources = sources.slice(0, Math.ceil(sourceCount/3));
-            const centerSources = sources.slice(Math.ceil(sourceCount/3), Math.ceil(2*sourceCount/3));
-            const rightSources = sources.slice(Math.ceil(2*sourceCount/3));
+            // Update source bubbles
+            parsedResults.sources.forEach(async (source, index) => {
+                if (elements.sourceBubbles[index]) {
+                    const bubble = elements.sourceBubbles[index];
+                    const link = bubble.querySelector('a');
+                    if (link) {
+                        // Extract URL from the source text and clean it
+                        const urlMatch = source.match(/https?:\/\/[^\s]+/);
+                        if (urlMatch) {
+                            const url = urlMatch[0]
+                                .replace(/[.,]+$/, '') // Remove trailing periods or commas
+                                .replace(/&amp;/g, '&') // Replace HTML entities
+                                .replace(/&quot;/g, '"')
+                                .replace(/&#39;/g, "'")
+                                .replace(/&lt;/g, '<')
+                                .replace(/&gt;/g, '>');
+                            
+                            link.href = url;
+                            link.target = '_blank';
+                            link.rel = 'noopener noreferrer';
+                            
+                            // Show the bubble
+                            bubble.style.display = 'block';
+                            
+                            // Fetch and set the title
+                            try {
+                                const title = await fetchSourceTitle(url);
+                                // If we got a title, use it, otherwise use the URL
+                                link.textContent = title || url;
+                                // Store the URL as a data attribute for reference
+                                link.setAttribute('data-url', url);
+                            } catch (error) {
+                                console.error('Error fetching title:', error);
+                                link.textContent = url;
+                            }
+                        } else {
+                            // If no URL found in this source, hide the bubble
+                            bubble.style.display = 'none';
+                        }
+                    }
+                }
+            });
 
-            if (elements.leftSources) {
-                elements.leftSources.textContent = leftSources.join('\n');
+            // Hide any unused bubbles
+            for (let i = parsedResults.sources.length; i < 5; i++) {
+                if (elements.sourceBubbles[i]) {
+                    elements.sourceBubbles[i].style.display = 'none';
+                }
             }
-            if (elements.centerSources) {
-                elements.centerSources.textContent = centerSources.join('\n');
-            }
-            if (elements.rightSources) {
-                elements.rightSources.textContent = rightSources.join('\n');
-            }
-        }
-
-        // Update bias meters (without percentage text)
-        if (elements.leftMeter) {
-            elements.leftMeter.style.width = '30%';
-            if (elements.leftBias) elements.leftBias.textContent = '';
-        }
-        if (elements.centerMeter) {
-            elements.centerMeter.style.width = '40%';
-            if (elements.centerBias) elements.centerBias.textContent = '';
-        }
-        if (elements.rightMeter) {
-            elements.rightMeter.style.width = '30%';
-            if (elements.rightBias) elements.rightBias.textContent = '';
+        } catch (error) {
+            console.error('Error parsing results:', error);
+            displayError('Failed to parse fact-checking results');
         }
     }
 
@@ -188,5 +204,82 @@ document.addEventListener('DOMContentLoaded', function() {
         if (elements.highlightedContent) {
             elements.highlightedContent.textContent = text;
         }
+    }
+
+    function copyToClipboard(elementId) {
+        const element = document.getElementById(elementId);
+        let textToCopy = '';
+
+        if (elementId === 'sources-content') {
+            // For sources, collect all source links
+            const sources = element.querySelectorAll('.source-link');
+            textToCopy = Array.from(sources)
+                .map(link => link.href)
+                .filter(href => href !== '#')
+                .join('\n');
+        } else {
+            // For other sections, copy the text content
+            textToCopy = element.textContent.trim();
+        }
+
+        // Create a temporary textarea element
+        const textarea = document.createElement('textarea');
+        textarea.value = textToCopy;
+        document.body.appendChild(textarea);
+        
+        // Select and copy the text
+        textarea.select();
+        document.execCommand('copy');
+        
+        // Remove the temporary element
+        document.body.removeChild(textarea);
+
+        // Show feedback
+        const button = element.previousElementSibling.querySelector('.copy-button');
+        const originalHTML = button.innerHTML;
+        button.innerHTML = `
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M20 6L9 17l-5-5"></path>
+            </svg>
+        `;
+        
+        // Reset the button after 1 second
+        setTimeout(() => {
+            button.innerHTML = originalHTML;
+        }, 1000);
+    }
+
+    function copySourceUrl(sourceId) {
+        const sourceBubble = document.getElementById(sourceId);
+        if (!sourceBubble) return;
+        
+        const link = sourceBubble.querySelector('.source-link');
+        if (!link || !link.href || link.href === '#') return;
+        
+        // Create a temporary textarea element
+        const textarea = document.createElement('textarea');
+        textarea.value = link.href;
+        document.body.appendChild(textarea);
+        
+        // Select and copy the text
+        textarea.select();
+        document.execCommand('copy');
+        
+        // Remove the temporary element
+        document.body.removeChild(textarea);
+        
+        // Show feedback
+        const button = sourceBubble.querySelector('.copy-source-button');
+        const originalHTML = button.innerHTML;
+        button.innerHTML = `
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M20 6L9 17l-5-5"></path>
+            </svg>
+        `;
+        
+        // Reset the button after 1 second
+        setTimeout(() => {
+            button.innerHTML = originalHTML;
+        }, 1000);
     }
 });
