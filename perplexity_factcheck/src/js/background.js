@@ -1,36 +1,119 @@
 // Listen for messages from content script
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    console.log('Received message:', message);
+    console.log('Background script received message:', message);
     
     if (message.action === 'factCheck') {
+        // Start fact checking process
         handleFactCheck(message.text)
             .then(response => {
                 console.log('Fact check completed successfully');
-                chrome.runtime.sendMessage({
-                    action: 'displayResults',
-                    results: response
-                });
+                sendResponse({ results: response });
             })
             .catch(error => {
                 console.error('Fact check failed:', error);
-                chrome.runtime.sendMessage({
-                    action: 'displayError',
-                    error: error.message
-                });
+                sendResponse({ error: error.message });
             });
-        return true;
+        return true; // Keep the message channel open for async response
     } else if (message.action === 'openPopup') {
         console.log('Opening popup...');
-        chrome.action.openPopup();
+        
+        const openPopupWithRetry = async () => {
+            const maxRetries = message.forceOpen ? 3 : 1;
+            let retryCount = 0;
+
+            const tryOpen = async () => {
+                try {
+                    // Get the current tab
+                    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+                    if (!tab) {
+                        throw new Error('No active tab found');
+                    }
+
+                    // Try to open the popup
+                    await chrome.action.openPopup();
+                    console.log('Popup opened successfully');
+
+                    // After successful popup open, get the selected text from storage
+                    const data = await chrome.storage.local.get(['selectedText']);
+                    if (data.selectedText) {
+                        // Start the fact check process
+                        try {
+                            const results = await handleFactCheck(data.selectedText);
+                            await chrome.storage.local.set({
+                                results: results,
+                                status: 'completed',
+                                timestamp: Date.now()
+                            });
+                            
+                            // Send results to popup
+                            chrome.runtime.sendMessage({
+                                action: 'displayResults',
+                                results: results
+                            });
+                        } catch (error) {
+                            console.error('Fact check failed:', error);
+                            await chrome.storage.local.set({
+                                error: error.message,
+                                status: 'error',
+                                timestamp: Date.now()
+                            });
+                            
+                            chrome.runtime.sendMessage({
+                                action: 'displayError',
+                                error: error.message
+                            });
+                        }
+                    }
+
+                    return true;
+                } catch (error) {
+                    console.error(`Failed to open popup (attempt ${retryCount + 1}):`, error);
+                    if (retryCount < maxRetries - 1) {
+                        retryCount++;
+                        await new Promise(resolve => setTimeout(resolve, 100));
+                        return tryOpen();
+                    }
+                    return false;
+                }
+            };
+
+            const success = await tryOpen();
+            if (!success) {
+                // If we couldn't open the popup, make the icon noticeable
+                try {
+                    await chrome.action.setBadgeText({ text: "!" });
+                    await chrome.action.setBadgeBackgroundColor({ color: "#F44336" });
+                } catch (error) {
+                    console.error('Failed to set badge:', error);
+                }
+            }
+            sendResponse({ success });
+        };
+
+        openPopupWithRetry().catch(error => {
+            console.error('Error in openPopupWithRetry:', error);
+            sendResponse({ success: false, error: error.message });
+        });
+
+        return true; // Keep the message channel open for async response
+    } else if (message.action === 'updateSelectedText') {
+        // Forward the selected text update to the popup
+        chrome.runtime.sendMessage({
+            action: 'updateSelectedText',
+            text: message.text
+        }).catch(error => {
+            console.error('Error forwarding selected text:', error);
+        });
+        return false; // No async response needed
     }
 });
 
-// Create context menu item when extension is in`st`alled
+// Create context menu item when extension is installed
 chrome.runtime.onInstalled.addListener(() => {
     chrome.contextMenus.removeAll(() => {
         chrome.contextMenus.create({
             id: 'factCheck',
-            title: 'Fact Check with Perplexity',
+            title: 'Fact Check with Truthly',
             contexts: ['selection']
         });
     });
@@ -55,14 +138,14 @@ async function handleFactCheck(text) {
             messages: [
                 {
                     role: "system",
-                    content: "Your response MUST contain ONLY the following: 1. Truth Percentage: Provide a single number followed immediately by a % sign (e.g., 85%) to represent the factual accuracy of the statement. (Treat any partially false statements as false.) 2. Summary: Summarize your research in a maximum of two sentences without footnotes nor bolding. 3. Sources: List the 5 most credible and relevant source URLs, separated by commas."
+                    content: "You are a fact-checking assistant. Your response MUST be in the following format:\n\nTruth Percentage: [number]%\n\nContext: [2-3 sentence summary]\n\nSources:\n1. [URL]\n2. [URL]\n3. [URL]\n4. [URL]\n5. [URL]\n\nIMPORTANT: You MUST provide exactly 5 sources. Each source must be a valid URL. Do not include any additional text or explanations."
                 },
                 {
                     role: "user",
                     content: text
                 }
             ],
-            max_tokens: 256,
+            max_tokens: 512,
             temperature: 0.2,
             top_p: 0.9,
             web_search_options: {
@@ -70,11 +153,6 @@ async function handleFactCheck(text) {
             }
         })
     };
-
-    console.log('Making API request with options:', {
-        ...options,
-        body: JSON.parse(options.body) // Log the parsed body for better readability
-    });
 
     try {
         const response = await fetch('https://api.perplexity.ai/chat/completions', options);
@@ -100,7 +178,39 @@ async function handleFactCheck(text) {
 
         const result = data.choices[0].message.content;
         console.log('Extracted result:', result);
-        return result;
+        
+        // Parse the result into a structured format
+        const lines = result.split('\n');
+        const sources = [];
+        
+        // Find the sources section
+        let inSourcesSection = false;
+        for (const line of lines) {
+            if (line.toLowerCase().includes('sources:')) {
+                inSourcesSection = true;
+                continue;
+            }
+            
+            if (inSourcesSection) {
+                const urlMatch = line.match(/https?:\/\/[^\s]+/);
+                if (urlMatch) {
+                    sources.push(urlMatch[0].replace(/[.,]+$/, ''));
+                }
+            }
+        }
+        
+        // Ensure we have exactly 5 sources
+        if (sources.length !== 5) {
+            throw new Error(`Expected 5 sources but got ${sources.length}`);
+        }
+        
+        const parsedResult = {
+            truthPercentage: parseInt(lines[0].match(/\d+/)[0]),
+            context: lines[2].replace('Context: ', ''),
+            sources: sources
+        };
+        
+        return JSON.stringify(parsedResult);
     } catch (error) {
         console.error('Error in handleFactCheck:', error);
         throw error;
@@ -122,16 +232,13 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
         try {
             // Try to open the popup
             await chrome.action.openPopup();
-        } catch (error) {
-            console.log('Could not open popup directly:', error);
-            chrome.action.setBadgeText({ text: "!" });
-            chrome.action.setBadgeBackgroundColor({ color: "#ff4593" });
-            setTimeout(() => {
-                chrome.action.setBadgeText({ text: "" });
-            }, 3000);
-        }
+            
+            // Send the selected text to the popup
+            chrome.runtime.sendMessage({
+                action: 'updateSelectedText',
+                text: info.selectionText
+            });
 
-        try {
             // Call the API and store results
             const results = await handleFactCheck(info.selectionText);
             await chrome.storage.local.set({
