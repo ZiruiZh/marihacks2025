@@ -6,15 +6,7 @@ document.addEventListener('DOMContentLoaded', function() {
         highlightedContent: document.getElementById('highlightedContent'),
         contextContent: document.getElementById('context-content'),
         contextDate: document.getElementById('context-date'),
-        leftSources: document.getElementById('left-sources'),
-        rightSources: document.getElementById('right-sources'),
-        centerSources: document.getElementById('center-sources'),
-        leftBias: document.getElementById('left-bias'),
-        rightBias: document.getElementById('right-bias'),
-        centerBias: document.getElementById('center-bias'),
-        leftMeter: document.getElementById('left-meter'),
-        rightMeter: document.getElementById('right-meter'),
-        centerMeter: document.getElementById('center-meter'),
+        sourceBubbles: Array.from({ length: 5 }, (_, i) => document.getElementById(`source-${i + 1}`)),
         themeToggle: document.getElementById('theme-toggle'),
         themeLabel: document.querySelector('.theme-toggle-label'),
         resultsContent: document.getElementById('resultsContent'),
@@ -109,17 +101,36 @@ document.addEventListener('DOMContentLoaded', function() {
         if (elements.loadingIndicator) elements.loadingIndicator.style.display = 'block';
     }
 
+    async function fetchSourceTitle(url) {
+        try {
+            const response = await fetch(url);
+            const html = await response.text();
+            const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+            return titleMatch ? titleMatch[1].trim() : null;
+        } catch (error) {
+            console.error('Error fetching title:', error);
+            return null;
+        }
+    }
+
     function displayResults(results) {
         hideAll();
         
-        // Parse the results string
-        const truthMatch = results.match(/(\d+)%/);
+        // Split the response into sections by line breaks
+        const sections = results.split('\n').filter(section => section.trim() !== '');
+        
+        // First section should be the truth percentage
+        const truthMatch = sections[0].match(/(\d+)%/);
         const truthPercentage = truthMatch ? truthMatch[1] : '--';
         
-        // Split the results into sections (assuming format: "X% \n\n Summary \n\n Sources")
-        const sections = results.split('\n\n');
-        const summary = sections[1] || '';
-        const sources = sections[2] ? sections[2].replace('Sources:', '').split(',').map(s => s.trim()) : [];
+        // Second section should be the context paragraph
+        const context = sections[1] || '';
+        
+        // Remaining sections should be the sources
+        // Filter out any empty lines and the "Sources:" header if present
+        const sources = sections.slice(2)
+            .filter(line => line.trim() !== '' && !line.toLowerCase().includes('sources:'))
+            .map(source => source.trim());
 
         // Update truth percentage
         if (elements.percentageValue) {
@@ -129,50 +140,55 @@ document.addEventListener('DOMContentLoaded', function() {
             elements.truthLabel.textContent = truthPercentage >= 70 ? 'True' : 'False';
         }
 
-        // Update context content with just the summary
+        // Update context content
         if (elements.contextContent) {
-            elements.contextContent.textContent = summary;
+            elements.contextContent.textContent = context;
         }
         if (elements.contextDate) {
             elements.contextDate.textContent = new Date().toLocaleDateString();
         }
 
-        // Update sources in their respective sections
-        const sourceCount = sources.length;
-        if (sourceCount > 0) {
-            // Add sources header to context content
-            if (elements.contextContent) {
-                elements.contextContent.textContent = `${summary}\n\nSources:`;
+        // Update source bubbles
+        sources.forEach(async (source, index) => {
+            if (elements.sourceBubbles[index]) {
+                const bubble = elements.sourceBubbles[index];
+                const link = bubble.querySelector('a');
+                if (link) {
+                    // Extract URL from the source text
+                    const urlMatch = source.match(/https?:\/\/[^\s]+/);
+                    if (urlMatch) {
+                        const url = urlMatch[0].replace(/[.,]+$/, ''); // Remove trailing periods or commas
+                        link.href = url;
+                        link.target = '_blank'; // Open in new tab
+                        link.rel = 'noopener noreferrer'; // Security best practice
+                        
+                        // Show the bubble
+                        bubble.style.display = 'block';
+                        
+                        // Fetch and set the title
+                        try {
+                            const title = await fetchSourceTitle(url);
+                            // If we got a title, use it, otherwise use the URL
+                            link.textContent = title || url;
+                            // Store the URL as a data attribute for reference
+                            link.setAttribute('data-url', url);
+                        } catch (error) {
+                            console.error('Error fetching title:', error);
+                            link.textContent = url;
+                        }
+                    } else {
+                        // If no URL found in this source, hide the bubble
+                        bubble.style.display = 'none';
+                    }
+                }
             }
+        });
 
-            // Distribute sources evenly
-            const leftSources = sources.slice(0, Math.ceil(sourceCount/3));
-            const centerSources = sources.slice(Math.ceil(sourceCount/3), Math.ceil(2*sourceCount/3));
-            const rightSources = sources.slice(Math.ceil(2*sourceCount/3));
-
-            if (elements.leftSources) {
-                elements.leftSources.textContent = leftSources.join('\n');
+        // Hide any unused bubbles
+        for (let i = sources.length; i < 5; i++) {
+            if (elements.sourceBubbles[i]) {
+                elements.sourceBubbles[i].style.display = 'none';
             }
-            if (elements.centerSources) {
-                elements.centerSources.textContent = centerSources.join('\n');
-            }
-            if (elements.rightSources) {
-                elements.rightSources.textContent = rightSources.join('\n');
-            }
-        }
-
-        // Update bias meters (without percentage text)
-        if (elements.leftMeter) {
-            elements.leftMeter.style.width = '30%';
-            if (elements.leftBias) elements.leftBias.textContent = '';
-        }
-        if (elements.centerMeter) {
-            elements.centerMeter.style.width = '40%';
-            if (elements.centerBias) elements.centerBias.textContent = '';
-        }
-        if (elements.rightMeter) {
-            elements.rightMeter.style.width = '30%';
-            if (elements.rightBias) elements.rightBias.textContent = '';
         }
     }
 

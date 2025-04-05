@@ -1,14 +1,18 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Perplexity Fact Check</title>
+    <title>Critical</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/styles.css">
     <meta charset="UTF-8">
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>Perplexity Fact Check</h1>
+            <h1>Critical</h1>
+            <p class="subtitle">The fact checker for anything and everything, backed up by sources</p>
             <div class="theme-toggle">
                 <label class="theme-switch">
                     <input type="checkbox" id="theme-toggle">
@@ -39,38 +43,23 @@
         </div>
 
         <div class="sources-section">
-            <div class="source-category">
-                <div class="source-header">
-                    <div class="bias-meter-container">
-                        <div class="bias-meter">
-                            <div id="left-meter" class="meter-fill left-meter"></div>
-                        </div>
-                        <span id="left-bias" class="bias-percentage">--%</span>
-                    </div>
+            <h2>Sources:</h2>
+            <div class="source-bubbles">
+                <div class="source-bubble" id="source-1">
+                    <a href="#" target="_blank" class="source-link">Loading source...</a>
                 </div>
-                <span class="source-content" id="left-sources">Loading sources...</span>
-            </div>
-            <div class="source-category">
-                <div class="source-header">
-                    <div class="bias-meter-container">
-                        <div class="bias-meter">
-                            <div id="right-meter" class="meter-fill right-meter"></div>
-                        </div>
-                        <span id="right-bias" class="bias-percentage">--%</span>
-                    </div>
+                <div class="source-bubble" id="source-2">
+                    <a href="#" target="_blank" class="source-link">Loading source...</a>
                 </div>
-                <span class="source-content" id="right-sources">Loading sources...</span>
-            </div>
-            <div class="source-category">
-                <div class="source-header">
-                    <div class="bias-meter-container">
-                        <div class="bias-meter">
-                            <div id="center-meter" class="meter-fill center-meter"></div>
-                        </div>
-                        <span id="center-bias" class="bias-percentage">--%</span>
-                    </div>
+                <div class="source-bubble" id="source-3">
+                    <a href="#" target="_blank" class="source-link">Loading source...</a>
                 </div>
-                <span class="source-content" id="center-sources">Loading sources...</span>
+                <div class="source-bubble" id="source-4">
+                    <a href="#" target="_blank" class="source-link">Loading source...</a>
+                </div>
+                <div class="source-bubble" id="source-5">
+                    <a href="#" target="_blank" class="source-link">Loading source...</a>
+                </div>
             </div>
         </div>
 
